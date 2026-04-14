@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import statsmodels.api as sm
+import numpy as np
 import io
 import plotly.express as px
 
@@ -12,10 +13,10 @@ st.markdown("請在下方選擇應變數 (Y)，並透過不同的標籤頁 (Tabs
 
 # --- 定義兩個資料檔的名稱 ---
 file_rate = '0408穩定幣與變數數據(變動率).csv'
-file_absolute = '0326穩定幣與變數數據(跑回歸用) - 工作表1.csv'  # <--- 新增的絕對值檔案
+file_absolute = '0326穩定幣與變數數據(跑回歸用) - 工作表1.csv'
 
 try:
-    # 讀取變動率檔案 (供 Tab 1~3 使用)
+    # 讀取變動率檔案
     df_rate = pd.read_csv(file_rate)
     
     if 'Date' in df_rate.columns:
@@ -29,13 +30,16 @@ try:
     default_index = columns_rate.index('USDT') if 'USDT' in columns_rate else 0
     target_y = st.selectbox("🎯 請選擇你要預測/分析的「應變數」(Y)：", columns_rate, index=default_index)
 
-    # 建立 5 個標籤頁
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+    # ==========================================
+    # 建立 6 個標籤頁 (新增了 Tab 6 詳細報表)
+    # ==========================================
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
         "📊 1. 獨立影響力分析", 
         "🔥 2. 相關係數熱力圖", 
         "📈 3. 變動率走勢圖", 
         "⏳ 4. 歷史事件分析",
-        "💰 5. 絕對價格走勢圖" # <--- 新增的 Tab
+        "💰 5. 絕對價格走勢",
+        "📄 6. 詳細迴歸報表 (仿Excel)"
     ])
 
     # ---------- 分頁 1：獨立影響力分析 ----------
@@ -87,14 +91,13 @@ try:
 
                 csv_buffer = io.BytesIO()
                 summary_table.to_csv(csv_buffer, index=False, encoding='utf-8-sig')
-                st.download_button("📥 下載完整分析結果 (CSV)", data=csv_buffer.getvalue(), file_name=f"{target_y}_迴歸分析結果.csv", mime="text/csv")
+                st.download_button("📥 下載完整分析結果 (CSV)", data=csv_buffer.getvalue(), file_name=f"{target_y}_影響力分析.csv", mime="text/csv")
             else:
                 st.warning("找不到足夠的有效資料。")
 
     # ---------- 分頁 2：相關係數熱力圖 ----------
     with tab2:
         st.subheader("變數之間的全局相關性 (Correlation)")
-        st.markdown("💡 **怎麼看這張圖？** 顏色越**紅**代表正相關越強；顏色越**藍**代表負相關越強。")
         corr_matrix = numeric_df_rate.corr().round(2)
         fig_heat = px.imshow(
             corr_matrix, text_auto=True, aspect="auto", 
@@ -105,7 +108,6 @@ try:
     # ---------- 分頁 3：變動率走勢圖 ----------
     with tab3:
         st.subheader(f"觀測 {target_y} 與其他變數的「變動率」波動軌跡")
-        st.markdown("此圖表顯示的是每日變動百分比，適合觀察短期波動性。")
         options = [col for col in columns_rate if col != target_y]
         default_selections = options[:2] if len(options) >= 2 else []
         selected_xs = st.multiselect("📊 請選擇要疊加對比的變數：", options, default=default_selections, key="ms_rate")
@@ -118,8 +120,6 @@ try:
     # ---------- 分頁 4：重大歷史事件與波動分析 ----------
     with tab4:
         st.subheader("⏳ 穩定幣重大歷史事件時間軸與結構分析")
-        st.markdown("本頁面基於《2020至2026年全球穩定幣市場波動、總體經濟衝擊與結構演變深度分析報告》彙整，探討不同穩定幣機制在極端事件中的真實抗壓能力。")
-        
         events_data = [
             {"日期": "2020-03-12", "事件名稱": "COVID-19「黑色星期四」流動性危機", "受影響幣種": "USDT, USDC", "波動方向": "溢價 (上漲)", "說明": "全球資本市場因疫情恐慌暴跌（比特幣單日跌 37.17%）。衍生品市場面臨連環強平，投資人瘋狂買入 USDT 與 USDC 避險。因傳統匯款延遲與區塊鏈擁堵，導致套利機制短暫失效，USDT 變動率異常高達 +5.48%。"},
             {"日期": "2022-05-09", "事件名稱": "Terra (UST) 演算法穩定幣死亡螺旋", "受影響幣種": "USDT, USDC", "波動方向": "USDT 恐慌拋售 / USDC 資金流入", "說明": "UST 崩潰引發對所有穩定幣儲備真實性的恐慌。USDT 因持有商業票據等資產，遭遇數十億美元擠兌贖回；同時間資金轉向被認為更安全（由現金與美債支持）的 USDC，造成板塊內資金輪動。"},
@@ -130,68 +130,103 @@ try:
             {"日期": "2026-01-10", "事件名稱": "傳統股權市場與 Sky (USDS) 深度綁定", "受影響幣種": "USDS", "波動方向": "資本結構升級", "說明": "納斯達克上市公司 NovaBay 更名為 Stablecoin Development Corp (SDEV)，並持有高達 21.5 億枚 SKY 代幣（佔總供應量 9.15%），標誌著傳統金融與 USDS 協議的深度整合。"},
             {"日期": "2026-03-17", "事件名稱": "PayPal (PYUSD) 全球佈局擴展", "受影響幣種": "PYUSD", "波動方向": "全球採用率增長", "說明": "PYUSD 將使用權限擴展至全球 70 個市場。透過大幅優化跨國清算週期，將穩定幣的應用場景從「加密資產交易媒介」推進為「全球商業結算基礎設施」。"}
         ]
-        
         df_events = pd.DataFrame(events_data)
-        
-        fig_timeline = px.scatter(
-            df_events, x="日期", y="受影響幣種", color="波動方向",
-            hover_name="事件名稱", title="歷史重大市場事件分佈與影響"
-        )
+        fig_timeline = px.scatter(df_events, x="日期", y="受影響幣種", color="波動方向", hover_name="事件名稱", title="歷史重大市場事件分佈與影響")
         fig_timeline.update_traces(marker=dict(size=18, symbol="diamond"))
         fig_timeline.update_layout(yaxis_title="受影響幣種", xaxis_title="發生日期", showlegend=True, height=400)
         st.plotly_chart(fig_timeline, use_container_width=True)
-        
-        st.markdown("### 🔍 穩定幣機制與波動原因深度解析")
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            st.info("**1. 避險擠兌與流動性錯配**")
-            st.write("如 USDT 在 2022 年 UST 崩潰時遭遇的壓力。當市場極度恐慌時，若穩定幣的儲備資產（如商業票據）無法瞬間變現以應付龐大的贖回需求，就會在二級市場產生折價脫鉤。")
-        with col2:
-            st.warning("**2. 傳統金融的傳染風險**")
-            st.write("如 USDC 在 2023 年 SVB 倒閉事件。法幣抵押型穩定幣高度依賴傳統銀行的託管安全。一旦託管銀行破產，即會引發恐慌拋售。")
-        with col3:
-            st.success("**3. DeFi 嵌套與預言機失效**")
-            st.write("如 DAI 在 SVB 事件被牽連，以及 USDe 在 2025 年因交易所定價失常閃崩。依賴智能合約的穩定幣，風險常來自演算法連鎖反應或數據源錯誤。")
 
-        st.markdown("---")
-        for event in events_data:
-            with st.expander(f"📌 {event['日期']} - {event['事件名稱']}"):
-                st.markdown(f"**受波及標的：** `{event['受影響幣種']}` | **短期價格表現：** `{event['波動方向']}`")
-                st.write(event['說明'])
-
-    # ---------- 🌟 分頁 5：絕對價格走勢圖 (新增) ----------
+    # ---------- 分頁 5：絕對價格走勢圖 ----------
     with tab5:
         st.subheader("💰 變數「絕對價格/數值」歷史走勢")
-        st.markdown("此圖表讀取的是資產的原始價格（或指數原始點數），適合觀察長期趨勢或真實脫鉤幅度。")
-        
         try:
-            # 讀取絕對值檔案
             df_abs = pd.read_csv(file_absolute)
-            if 'Date' in df_abs.columns:
-                df_abs = df_abs.set_index('Date')
-            elif '日期' in df_abs.columns:
-                df_abs = df_abs.set_index('日期')
-                
+            if 'Date' in df_abs.columns: df_abs = df_abs.set_index('Date')
+            elif '日期' in df_abs.columns: df_abs = df_abs.set_index('日期')
             columns_abs = df_abs.select_dtypes(include='number').columns.tolist()
             
-            # 確保應變數 Y 在新檔案中也存在
             if target_y in columns_abs:
                 options_abs = [col for col in columns_abs if col != target_y]
-                
-                # 因為是看價格，預設先不選其他對比項目，以免如比特幣(數萬)和USDT(1)放在同一張圖比例會跑掉
                 selected_xs_abs = st.multiselect("📊 請選擇要疊加對比的變數：", options_abs, default=[], key="ms_abs")
-                
                 vars_to_plot_abs = [target_y] + selected_xs_abs
                 fig_abs_line = px.line(df_abs, y=vars_to_plot_abs, title=f"原始數值走勢對比 (基準: {target_y})")
                 st.plotly_chart(fig_abs_line, use_container_width=True)
-                
-                st.info("💡 **提示：** 絕對價格圖表如果將標的物（如 USDT 約 1 美元）與大數據（如 Bitcoin 約數萬美元）放在一起，會導致線條被壓縮。建議分開觀察，或僅對比數值相近的穩定幣。")
             else:
-                st.warning(f"⚠️ 在絕對值檔案中找不到目前選擇的應變數：{target_y}")
-                
+                st.warning(f"⚠️ 找不到目前選擇的應變數：{target_y}")
         except FileNotFoundError:
             st.error(f"❌ 找不到絕對值資料檔案：{file_absolute}")
-            st.info("請確認該檔案已上傳至 GitHub，且檔名與程式碼中設定的完全一致。")
+
+    # ---------- 🌟 分頁 6：詳細迴歸報表 (仿 Excel) ----------
+    with tab6:
+        st.subheader("📄 單一變數詳細迴歸報表 (仿 Excel 輸出)")
+        st.markdown("此頁面能產生與傳統統計軟體 (如 Excel、SPSS) 格式一致的詳細迴歸分析表，包含 ANOVA 變異數分析。")
+        
+        # 讓使用者選擇要深度分析的單一 X 變數
+        options_detail = [col for col in columns_rate if col != target_y]
+        selected_x_detail = st.selectbox("🎯 請選擇要查看詳細報表的「自變數 (X)」：", options_detail, key="detail_x")
+        
+        if st.button("📊 產生詳細報表"):
+            temp_data = numeric_df_rate[[target_y, selected_x_detail]].dropna()
+            
+            if len(temp_data) > 10:
+                # 執行迴歸
+                y_detail = temp_data[target_y]
+                X_detail = sm.add_constant(temp_data[selected_x_detail])
+                model_detail = sm.OLS(y_detail, X_detail).fit()
+                
+                # --- 1. 迴歸統計 ---
+                reg_stats = pd.DataFrame({
+                    "指標": ["Multiple R", "R Square", "Adjusted R Square", "Standard Error", "Observations"],
+                    "數值": [
+                        np.sqrt(model_detail.rsquared) if model_detail.rsquared > 0 else 0, # Multiple R
+                        model_detail.rsquared,
+                        model_detail.rsquared_adj,
+                        np.sqrt(model_detail.mse_resid), # Standard Error (殘差均方的平方根)
+                        int(model_detail.nobs)
+                    ]
+                })
+                
+                # --- 2. 變異數分析 (ANOVA) ---
+                anova_data = {
+                    "變異源": ["迴歸 (Regression)", "殘差 (Residual)", "總和 (Total)"],
+                    "df": [int(model_detail.df_model), int(model_detail.df_resid), int(model_detail.nobs - 1)],
+                    "SS": [model_detail.ess, model_detail.ssr, model_detail.centered_tss],
+                    "MS": [model_detail.mse_model, model_detail.mse_resid, np.nan],
+                    "F": [model_detail.fvalue, np.nan, np.nan],
+                    "Significance F": [model_detail.f_pvalue, np.nan, np.nan]
+                }
+                anova_df = pd.DataFrame(anova_data)
+                
+                # --- 3. 係數表 (Coefficients) ---
+                conf_int = model_detail.conf_int(alpha=0.05)
+                coef_data = {
+                    "變數": ["Intercept (截距)", selected_x_detail],
+                    "Coefficients": model_detail.params.values,
+                    "Standard Error": model_detail.bse.values,
+                    "t Stat": model_detail.tvalues.values,
+                    "P-value": model_detail.pvalues.values,
+                    "Lower 95%": conf_int[0].values,
+                    "Upper 95%": conf_int[1].values
+                }
+                coef_df = pd.DataFrame(coef_data)
+                
+                # --- 畫面輸出 ---
+                st.markdown("#### 1. 迴歸統計")
+                st.dataframe(reg_stats.style.format({"數值": "{:.6f}"}), use_container_width=True)
+                
+                st.markdown("#### 2. 變異數分析 (ANOVA)")
+                st.dataframe(anova_df.style.format({
+                    "SS": "{:.6f}", "MS": "{:.6f}", "F": "{:.6f}", "Significance F": "{:.4e}"
+                }, na_rep=""), use_container_width=True)
+                
+                st.markdown("#### 3. 係數檢定表")
+                st.dataframe(coef_df.style.format({
+                    "Coefficients": "{:.6f}", "Standard Error": "{:.6f}", "t Stat": "{:.6f}", 
+                    "P-value": "{:.4e}", "Lower 95%": "{:.6f}", "Upper 95%": "{:.6f}"
+                }), use_container_width=True)
+
+            else:
+                st.warning("⚠️ 此變數與應變數重疊的有效資料筆數不足，無法產生詳細報表。")
 
 except FileNotFoundError:
     st.error(f"❌ 找不到變動率資料檔案：{file_rate}")
