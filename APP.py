@@ -8,9 +8,170 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 # 設定網頁標題與寬度
-st.set_page_config(page_title="穩定幣全維度影響力分析儀表板", layout="wide")
-st.title("📊 穩定幣全維度影響力分析儀表板")
-st.markdown("本系統整合了自動化單變量/多變量迴歸、歷史事件對照與專業統計報表，提供深度的穩定幣波動誘因剖析。")
+st.set_page_config(page_title="穩定幣波動度與市場關聯分析", layout="wide", page_icon="🪙")
+
+# ── 全域美工 CSS ──────────────────────────────────────────────
+st.markdown("""
+<style>
+/* ---- 整體背景 ---- */
+[data-testid="stAppViewContainer"] {
+    background: linear-gradient(160deg, #0a0e1a 0%, #0d1220 60%, #0a0f1c 100%);
+}
+[data-testid="stHeader"] { background: transparent; }
+[data-testid="stSidebar"] { background: #0d1220; }
+
+/* ---- 主要字體顏色 ---- */
+html, body, [class*="css"] { color: #e2e8f0; }
+
+/* ---- Tab 樣式 ---- */
+[data-testid="stTabs"] [role="tablist"] {
+    background: rgba(255,255,255,0.03);
+    border-radius: 12px;
+    padding: 4px;
+    border: 1px solid rgba(255,215,0,0.12);
+    gap: 2px;
+}
+[data-testid="stTabs"] button[role="tab"] {
+    border-radius: 8px;
+    color: #94a3b8;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 8px 14px;
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+}
+[data-testid="stTabs"] button[role="tab"]:hover {
+    color: #ffd700;
+    background: rgba(255,215,0,0.06);
+}
+[data-testid="stTabs"] button[aria-selected="true"] {
+    background: rgba(255,215,0,0.12) !important;
+    color: #ffd700 !important;
+    border-bottom: 2px solid #ffd700 !important;
+}
+
+/* ---- 按鈕 ---- */
+[data-testid="stButton"] > button {
+    background: linear-gradient(135deg, #1a2540, #1e2d4a);
+    color: #ffd700;
+    border: 1px solid rgba(255,215,0,0.35);
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 10px 24px;
+    transition: all 0.2s;
+    letter-spacing: 0.3px;
+}
+[data-testid="stButton"] > button:hover {
+    background: linear-gradient(135deg, #ffd700, #ffb300);
+    color: #0a0e1a;
+    border-color: #ffd700;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(255,215,0,0.3);
+}
+
+/* ---- Selectbox / Multiselect ---- */
+[data-testid="stSelectbox"] > div,
+[data-testid="stMultiSelect"] > div {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,215,0,0.2);
+    border-radius: 8px;
+}
+
+/* ---- Metric 卡片 ---- */
+[data-testid="stMetric"] {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,215,0,0.15);
+    border-radius: 10px;
+    padding: 12px 16px;
+}
+[data-testid="stMetricLabel"] { color: #94a3b8 !important; font-size: 12px; }
+[data-testid="stMetricValue"] { color: #ffd700 !important; font-size: 22px; font-weight: 700; }
+
+/* ---- Dataframe ---- */
+[data-testid="stDataFrame"] {
+    border: 1px solid rgba(255,215,0,0.1);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* ---- Expander ---- */
+[data-testid="stExpander"] {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,215,0,0.1);
+    border-radius: 10px;
+}
+
+/* ---- Info / Warning / Success ---- */
+[data-testid="stAlert"] {
+    border-radius: 8px;
+    border-left-width: 4px;
+}
+
+/* ---- Divider ---- */
+hr { border-color: rgba(255,215,0,0.1) !important; }
+
+/* ---- Progress bar ---- */
+[data-testid="stProgressBar"] > div > div {
+    background: linear-gradient(90deg, #ffd700, #ffb300);
+}
+
+/* ---- Download button ---- */
+[data-testid="stDownloadButton"] > button {
+    background: rgba(255,215,0,0.08);
+    color: #ffd700;
+    border: 1px solid rgba(255,215,0,0.3);
+    border-radius: 8px;
+    font-weight: 500;
+}
+[data-testid="stDownloadButton"] > button:hover {
+    background: rgba(255,215,0,0.18);
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ── 頁首 Banner ───────────────────────────────────────────────
+st.markdown("""
+<div style="
+    background: linear-gradient(135deg, rgba(255,215,0,0.08) 0%, rgba(26,37,64,0.6) 100%);
+    border: 1px solid rgba(255,215,0,0.2);
+    border-radius: 16px;
+    padding: 32px 40px 28px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+">
+    <div style="position:absolute;top:0;right:0;width:300px;height:100%;
+                background:radial-gradient(ellipse at top right, rgba(255,215,0,0.06), transparent 70%);
+                pointer-events:none;"></div>
+    <p style="color:#ffd700;font-size:11px;font-weight:600;letter-spacing:3px;
+              text-transform:uppercase;margin:0 0 10px">
+        Academic Research Dashboard
+    </p>
+    <h1 style="color:#f1f5f9;font-size:28px;font-weight:700;margin:0 0 10px;line-height:1.3">
+        🪙 穩定幣波動度與金融市場關聯分析
+    </h1>
+    <p style="color:#94a3b8;font-size:14px;margin:0 0 20px;line-height:1.7">
+        本系統整合自動化 OLS 單變量／多變量迴歸、歷史事件對照與專業統計報表，<br>
+        針對 <b style="color:#e2e8f0">USDT、USDC、USDS</b> 三大穩定幣進行深度波動誘因剖析。
+    </p>
+    <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <span style="background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.25);
+                     color:#ffd700;font-size:12px;padding:4px 12px;border-radius:20px;font-weight:500">
+            📅 資料期間：2020/01 – 2026/03
+        </span>
+        <span style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+                     color:#94a3b8;font-size:12px;padding:4px 12px;border-radius:20px">
+            📊 樣本數：2,266 筆日資料
+        </span>
+        <span style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+                     color:#94a3b8;font-size:12px;padding:4px 12px;border-radius:20px">
+            🔢 變數數：20 個市場指標
+        </span>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
 # --- 定義資料檔名稱 ---
 file_rate = '0408穩定幣與變數數據(變動率).csv'
@@ -29,7 +190,8 @@ try:
     columns_rate = numeric_df_rate.columns.tolist()
 
     default_index = columns_rate.index('USDT') if 'USDT' in columns_rate else 0
-    target_y = st.selectbox("🎯 選擇分析應變數 (Y)：", columns_rate, index=default_index)
+    st.markdown('<p style="color:#94a3b8;font-size:13px;margin-bottom:4px">🎯 選擇分析應變數 (Y)</p>', unsafe_allow_html=True)
+    target_y = st.selectbox("選擇分析應變數 (Y)", columns_rate, index=default_index, label_visibility="collapsed")
 
     # 建立標籤頁
     tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
@@ -40,7 +202,7 @@ try:
         "💰 5. 絕對價格走勢",
         "📄 6. 單一變數詳細報表",
         "🏆 7. 多變量複迴歸 (自動篩選)",
-        "🔬 8. 多元回歸分析(自選)"
+        "🔬 8. 穩定幣穩定性研究"
     ])
 
     # ---------- 分頁 1：獨立影響完整報告 ----------
