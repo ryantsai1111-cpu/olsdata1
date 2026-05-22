@@ -32,6 +32,44 @@ def render_pdf_download(fig, file_name):
         st.info("若要下載 PDF，請先安裝 requirements.txt 內的 kaleido 後重新啟動 App。")
 
 
+def style_comparison_chart(fig):
+    palette = [
+        "#2563eb", "#dc2626", "#16a34a", "#9333ea", "#ea580c",
+        "#0891b2", "#be123c", "#4f46e5", "#65a30d", "#ca8a04",
+        "#0f766e", "#7c2d12",
+    ]
+    dash_styles = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"]
+    for i, trace in enumerate(fig.data):
+        trace.update(
+            line=dict(
+                color=palette[i % len(palette)],
+                width=2.8,
+                dash=dash_styles[(i // len(palette)) % len(dash_styles)],
+            )
+        )
+    fig.update_layout(
+        template="plotly_white",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(color="#111827", size=12),
+        legend=dict(
+            title_text="樣本",
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="left",
+            x=0,
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="#d1d5db",
+            borderwidth=1,
+        ),
+        margin=dict(l=60, r=30, t=95, b=60),
+    )
+    fig.update_xaxes(showgrid=True, gridcolor="#e5e7eb", title_text="日期")
+    fig.update_yaxes(showgrid=True, gridcolor="#e5e7eb")
+    return fig
+
+
 def filter_by_date_range(df, key_prefix):
     if not isinstance(df.index, pd.DatetimeIndex) or df.empty:
         return df
@@ -307,6 +345,7 @@ try:
                 title="變動率走勢對比",
                 labels={"value": "變動率", "variable": "樣本", "index": "日期"},
             )
+            fig_line = style_comparison_chart(fig_line)
             st.plotly_chart(fig_line, use_container_width=True)
             render_pdf_download(fig_line, "Lab3_變動率走勢對比.pdf")
         else:
@@ -356,6 +395,7 @@ try:
                     title="原始數值走勢對比",
                     labels={"value": "數值", "variable": "樣本", "index": "日期"},
                 )
+                fig_abs = style_comparison_chart(fig_abs)
                 st.plotly_chart(fig_abs, use_container_width=True)
                 render_pdf_download(fig_abs, "Lab5_原始數值走勢對比.pdf")
             else:
