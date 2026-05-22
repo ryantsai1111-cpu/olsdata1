@@ -7,6 +7,49 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+
+def prepare_time_series(df):
+    """Return a copy with a datetime index when the source index can be parsed."""
+    prepared = df.copy()
+    parsed_index = pd.to_datetime(prepared.index, errors="coerce")
+    if parsed_index.notna().any():
+        prepared = prepared.loc[parsed_index.notna()].copy()
+        prepared.index = parsed_index[parsed_index.notna()]
+        prepared = prepared.sort_index()
+    return prepared
+
+
+def render_pdf_download(fig, file_name):
+    try:
+        pdf_bytes = fig.to_image(format="pdf")
+        st.download_button(
+            "📥 下載走勢圖 PDF",
+            data=pdf_bytes,
+            file_name=file_name,
+            mime="application/pdf",
+        )
+    except Exception:
+        st.info("若要下載 PDF，請先安裝 requirements.txt 內的 kaleido 後重新啟動 App。")
+
+
+def filter_by_date_range(df, key_prefix):
+    if not isinstance(df.index, pd.DatetimeIndex) or df.empty:
+        return df
+
+    min_date = df.index.min().date()
+    max_date = df.index.max().date()
+    selected_range = st.date_input(
+        "選擇時間區間",
+        value=(min_date, max_date),
+        min_value=min_date,
+        max_value=max_date,
+        key=f"{key_prefix}_date_range",
+    )
+    if isinstance(selected_range, tuple) and len(selected_range) == 2:
+        start_date, end_date = selected_range
+        return df.loc[(df.index.date >= start_date) & (df.index.date <= end_date)]
+    return df
+
 # 設定網頁標題與寬度
 st.set_page_config(page_title="穩定幣波動度與市場關聯分析", layout="wide", page_icon="🪙")
 
@@ -186,6 +229,7 @@ try:
         df_rate = df_rate.set_index('日期')
     elif 'Time' in df_rate.columns:
         df_rate = df_rate.set_index('Time')
+    df_rate = prepare_time_series(df_rate)
     numeric_df_rate = df_rate.select_dtypes(include='number')
     columns_rate = numeric_df_rate.columns.tolist()
 
@@ -247,11 +291,26 @@ try:
     # ---------- 分頁 3：變動率走勢圖 ----------
     with tab3:
         st.subheader(f"觀測 {target_y} 與其他變數的波動軌跡")
-        options = [col for col in columns_rate if col != target_y]
-        selected_xs = st.multiselect("📊 選擇對比變數：", options, default=options[:1], key="ms_rate")
-        if selected_xs:
-            fig_line = px.line(df_rate, y=[target_y] + selected_xs, title="變動率走勢對比")
+        selected_samples = st.multiselect(
+            "📊 選擇要比較的樣本：",
+            columns_rate,
+            default=[target_y],
+            key="ms_rate_samples",
+        )
+        filtered_rate = filter_by_date_range(numeric_df_rate, "lab3")
+        if filtered_rate.empty:
+            st.warning("這個時間區間沒有可用資料。")
+        elif selected_samples:
+            fig_line = px.line(
+                filtered_rate,
+                y=selected_samples,
+                title="變動率走勢對比",
+                labels={"value": "變動率", "variable": "樣本", "index": "日期"},
+            )
             st.plotly_chart(fig_line, use_container_width=True)
+            render_pdf_download(fig_line, "Lab3_變動率走勢對比.pdf")
+        else:
+            st.warning("請至少選擇一個樣本。")
 
     # ---------- 分頁 4：重大歷史事件分析 ----------
     with tab4:
@@ -279,11 +338,28 @@ try:
             if 'Date' in df_abs.columns: df_abs = df_abs.set_index('Date')
             elif '日期' in df_abs.columns: df_abs = df_abs.set_index('日期')
             elif 'Time' in df_abs.columns: df_abs = df_abs.set_index('Time')
+            df_abs = prepare_time_series(df_abs)
             cols_abs = df_abs.select_dtypes(include='number').columns.tolist()
-            if target_y in cols_abs:
-                selected_xs_abs = st.multiselect("📊 選擇對比變數：", [c for c in cols_abs if c != target_y], key="ms_abs")
-                fig_abs = px.line(df_abs, y=[target_y] + selected_xs_abs, title="原始數值走勢對比")
+            selected_abs_samples = st.multiselect(
+                "📊 選擇要比較的樣本：",
+                cols_abs,
+                default=[target_y] if target_y in cols_abs else cols_abs[:1],
+                key="ms_abs_samples",
+            )
+            filtered_abs = filter_by_date_range(df_abs.select_dtypes(include='number'), "lab5")
+            if filtered_abs.empty:
+                st.warning("這個時間區間沒有可用資料。")
+            elif selected_abs_samples:
+                fig_abs = px.line(
+                    filtered_abs,
+                    y=selected_abs_samples,
+                    title="原始數值走勢對比",
+                    labels={"value": "數值", "variable": "樣本", "index": "日期"},
+                )
                 st.plotly_chart(fig_abs, use_container_width=True)
+                render_pdf_download(fig_abs, "Lab5_原始數值走勢對比.pdf")
+            else:
+                st.warning("請至少選擇一個樣本。")
         except FileNotFoundError:
             st.error("❌ 找不到絕對值檔案。")
 
