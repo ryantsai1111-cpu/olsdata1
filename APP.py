@@ -19,9 +19,21 @@ def prepare_time_series(df):
     return prepared
 
 
-def render_pdf_download(fig, file_name):
+def render_pdf_download(fig, file_name, pdf_title, pdf_y_title):
     try:
-        pdf_bytes = fig.to_image(format="pdf")
+        pdf_fig = go.Figure(fig)
+        pdf_fig.update_layout(
+            title=pdf_title,
+            font=dict(
+                family="Noto Sans CJK TC, Microsoft JhengHei, Arial, Helvetica, sans-serif",
+                color="#111827",
+                size=12,
+            ),
+            legend=dict(title_text="Sample"),
+        )
+        pdf_fig.update_xaxes(title_text="Date")
+        pdf_fig.update_yaxes(title_text=pdf_y_title)
+        pdf_bytes = pdf_fig.to_image(format="pdf")
         st.download_button(
             "📥 下載走勢圖 PDF",
             data=pdf_bytes,
@@ -347,7 +359,12 @@ try:
             )
             fig_line = style_comparison_chart(fig_line)
             st.plotly_chart(fig_line, use_container_width=True)
-            render_pdf_download(fig_line, "Lab3_變動率走勢對比.pdf")
+            render_pdf_download(
+                fig_line,
+                "Lab3_rate_trend_comparison.pdf",
+                "Lab3 Rate Trend Comparison",
+                "Rate",
+            )
         else:
             st.warning("請至少選擇一個樣本。")
 
@@ -397,7 +414,12 @@ try:
                 )
                 fig_abs = style_comparison_chart(fig_abs)
                 st.plotly_chart(fig_abs, use_container_width=True)
-                render_pdf_download(fig_abs, "Lab5_原始數值走勢對比.pdf")
+                render_pdf_download(
+                    fig_abs,
+                    "Lab5_raw_value_trend_comparison.pdf",
+                    "Lab5 Raw Value Trend Comparison",
+                    "Value",
+                )
             else:
                 st.warning("請至少選擇一個樣本。")
         except FileNotFoundError:
