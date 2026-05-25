@@ -8,6 +8,23 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 
+# 穩定幣類（不得互相當 X/Y）
+STABLECOINS = ['USDT', 'USDC', 'USDe', 'USDS', 'DAI', 'PAXG_Price', 'PayPal USD']
+
+# 合法金融市場 X（外生變數，可當任何 Y 的 X）
+MARKET_VARS = [
+    'bitcoin', 'S&P500', 'NASDAQ_Price', '道瓊平均工業指數',
+    'VIX', 'DXY_Index', 'USD/EUR', 'USD/JPY', 'USD/CNY',
+    '美國公債10年期殖利率', 'T10YIE(類似通膨日資料)', '聯準會利率', 'UNRATE'
+]
+
+
+def get_x_candidates(y_variable, numeric_columns):
+    if y_variable in STABLECOINS:
+        return [c for c in MARKET_VARS if c in numeric_columns]
+    return [c for c in numeric_columns if c != y_variable]
+
+
 def prepare_time_series(df):
     """Return a copy with a datetime index when the source index can be parsed."""
     prepared = df.copy()
@@ -334,9 +351,17 @@ try:
     # ---------- 分頁 2：相關係數熱力圖 ----------
     with tab2:
         st.subheader("變數之間的全局相關性 (Correlation)")
-        corr_matrix = numeric_df_rate.corr().round(2)
-        fig_heat = px.imshow(corr_matrix, text_auto=True, aspect="auto", color_continuous_scale='RdBu_r', zmin=-1, zmax=1)
-        st.plotly_chart(fig_heat, use_container_width=True)
+        show_stable_only = st.checkbox("只顯示穩定幣之間的相關係數", value=False)
+        if show_stable_only:
+            cols_to_show = [c for c in STABLECOINS if c in numeric_df_rate.columns]
+        else:
+            cols_to_show = numeric_df_rate.columns.tolist()
+        if len(cols_to_show) >= 2:
+            corr_matrix = numeric_df_rate[cols_to_show].corr().round(2)
+            fig_heat = px.imshow(corr_matrix, text_auto=True, aspect="auto", color_continuous_scale='RdBu_r', zmin=-1, zmax=1)
+            st.plotly_chart(fig_heat, use_container_width=True)
+        else:
+            st.warning("可用欄位不足，無法產生相關係數矩陣。")
 
     # ---------- 分頁 3：變動率走勢圖 ----------
     with tab3:
@@ -446,7 +471,7 @@ try:
         st.subheader("🏆 多變量複迴歸分析 (自動篩選與 Excel 級完整報表)")
         st.markdown("**分析邏輯**：系統會自動篩選出單變量顯著 (**P < 0.05**) 的變數，並執行複迴歸。")
         if st.button("🚀 執行多變量複迴歸分析"):
-            independent_vars = [col for col in columns_rate if col != target_y]
+            independent_vars = [col for col in MARKET_VARS if col in columns_rate]
             significant_xs = []
             for x_var in independent_vars:
                 temp_data = numeric_df_rate[[target_y, x_var]].dropna()
@@ -535,6 +560,8 @@ try:
                 st.markdown(" ")
                 st.caption(f"目前選擇：**{y_selected}**　樣本數：{numeric_df_rate[y_selected].dropna().shape[0]:,} 筆")
 
+            x_candidates = get_x_candidates(y_selected, all_numeric_cols)
+
             # ── 分組建議 ──────────────────────────────────────────
             GROUP_SUGGEST = {
                 "📈 加密市場": ["bitcoin", "PAXG_Price"],
@@ -545,11 +572,10 @@ try:
             }
             with st.expander("💡 分組建議參考（點擊展開）— 每組擇一可降低共線性"):
                 for grp, vars_ in GROUP_SUGGEST.items():
-                    available = [v for v in vars_ if v in all_numeric_cols and v != y_selected]
+                    available = [v for v in vars_ if v in x_candidates]
                     st.markdown(f"**{grp}**：{', '.join(available) if available else '—'}")
 
             # ── X 多選器 ──────────────────────────────────────────
-            x_candidates = [c for c in all_numeric_cols if c != y_selected]
             x_defaults_suggest = [v for v in
                 ["bitcoin", "S&P500", "VIX", "DXY_Index", "美國公債10年期殖利率", "T10YIE(類似通膨日資料)"]
                 if v in x_candidates]
@@ -583,6 +609,15 @@ try:
                     st.error("請至少選擇一個自變數 X。")
                 else:
                     reg_data = numeric_df_rate[[y_selected] + x_selected].dropna()
+                    y_full_n = numeric_df_rate[y_selected].dropna().shape[0]
+                    if y_full_n > 0 and len(reg_data) < y_full_n * 0.8:
+                        st.warning(
+                            f"⚠️ 樣本縮減警告：Y（{y_selected}）完整樣本為 {y_full_n} 筆，"
+                            f"但納入所選 X 後有效樣本縮減至 {len(reg_data)} 筆（"
+                            f"{len(reg_data)/y_full_n*100:.0f}%）。\n\n"
+                            f"原因通常是某個 X 的資料起始時間較晚。"
+                            f"不同樣本期間的模型 R² 不可直接比較。"
+                        )
                     if len(reg_data) < len(x_selected) + 10:
                         st.error(f"有效樣本數不足（{len(reg_data)} 筆），請減少 X 數量或換一個 Y。")
                     else:
